@@ -151,7 +151,7 @@ window.BitStream = BitStream;
             console.log('Recording stopped');
           };
 
-          this.mediaRecorder.start(3000); // Start recording with a timeslice of 100ms
+          this.mediaRecorder.start(5000); // Start recording with a timeslice of 100ms
           this.isRecording = true;
         } catch (error) {
           console.error('Error accessing microphone:', error);

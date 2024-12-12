@@ -57,13 +57,7 @@ async def process_request(request: Request):
 
 
 
-#TODO: https://github.com/openai/whisper
 
-@app.post("/predict")
-async def predict_translation(request: Request):
-    return {"message": "will run"}
-    
-    
 model_size = "tiny"
 model = WhisperModel(model_size, device="cpu", compute_type="float32")
 
@@ -73,6 +67,13 @@ model = WhisperModel(model_size, device="cpu", compute_type="float32")
 # print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 # for segment in segments:
 #     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+
+print("Transcribing...")
+segments, info = model.transcribe("app/tests/received_audio.webm", beam_size=5)
+print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+for segment in segments:
+    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+
 
 
 async def audio_handler(websocket: WebSocket):
@@ -98,8 +99,6 @@ async def audio_handler(websocket: WebSocket):
 
                 with open("received_audio.webm", "wb") as audio_file:  
                         audio_file.write(data)  
-                        
-                continue
 
                 audio_file = io.BytesIO(data)
                 # Now you can process the mp3_buffer as needed
@@ -113,9 +112,11 @@ async def audio_handler(websocket: WebSocket):
 
                 response = {"message": "Audio processed"}
                 await websocket.send_json(response)  # Send a response back to the client
-            except asyncio.TimeoutError:
-                print("No data received for 5 seconds, stopping processing.")
-                break  # Exit the loop without closing the connection
+            finally:
+                print("done")
+            # except asyncio.TimeoutError():
+            #     print("No data received for 5 seconds, stopping processing.")
+            #     break  # Exit the loop without closing the connection
     except WebSocketDisconnect:
         print("Client disconnected")
 

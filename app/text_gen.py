@@ -1,3 +1,11 @@
+#### THIS CODE IS NOT USED RIGHT NOW
+
+
+@app.post("/predict")
+async def predict_translation(request: Request):
+    return {"message": "will run"}
+    
+
 hf_api_key = os.environ.get("HUGGING_FACE_TOKEN")
 
 #my_model_path = "app/MobileLLM-600M/MobileLLM-600M.Q8_0.gguf"

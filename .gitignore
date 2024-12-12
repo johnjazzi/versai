@@ -29,4 +29,5 @@ build/
 # Misc
 *.DS_Store
 
-app/models/
+*app/models/
+*app/tests/
