@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Virtual environment
+venv/
+env/
+ENV/
+.venv/
+.env
+ai-edge-torch-venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# Node modules (if using Vite)
+node_modules/
+dist/
+build/
+
+# Logs
+*.log
+
+# Misc
+*.DS_Store
+
+app/models/
