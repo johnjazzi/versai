@@ -68,25 +68,24 @@ model = WhisperModel(model_size, device="cpu", compute_type="float32")
 # for segment in segments:
 #     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 
-print("Transcribing...")
-segments, info = model.transcribe("app/tests/received_audio.webm", beam_size=5)
-print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
-for segment in segments:
-    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 
-
+data = 1
 
 async def audio_handler(websocket: WebSocket):
     await websocket.accept()  # Accept the WebSocket connection
 
-    data = []
+    global data
 
     try:
         while True:
             try:
                 # Set a timeout for receiving data
 
-                data = await websocket.receive_bytes()
+                if data == 1:
+                    data = await websocket.receive_bytes()
+                else:
+                    new_file = await websocket.receive_bytes()
+                    data = data + new_file
 
                 print("Received audio data, length:", len(data))
 
@@ -101,12 +100,10 @@ async def audio_handler(websocket: WebSocket):
                     print("Received data is not in the expected WebM format.")
                     continue  # Skip processing if data is not valid
 
-                with open("received_audio.webm", "wb") as audio_file:  
-                        audio_file.write(data)  
+                # with open("received_audio.webm", "wb") as audio_file:  
+                #         audio_file.write(data)  
 
                 audio_file = io.BytesIO(data)
-                # Now you can process the mp3_buffer as needed
-                # For example, you can save it or transcribe it
                 segments, info = model.transcribe(audio_file, beam_size=5)
 
                 print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
