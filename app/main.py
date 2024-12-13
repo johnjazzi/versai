@@ -10,6 +10,7 @@ from llama_cpp import Llama
 from faster_whisper import WhisperModel
 import io
 from pydub import AudioSegment
+import json
 
 app = FastAPI()
 
@@ -20,21 +21,6 @@ app.add_middleware(
     allow_methods=["*"],  # Allows all methods (GET, POST, etc.)
     allow_headers=["*"],  # Allows all headers
 )
-
-last_request_id: Optional[int] = None
-last_response: Optional[JSONResponse] = None
-
-
-async def debounce_predict(request_id: int, request: Request):
-    global last_request_id, last_response
-    # Wait for a short period to allow for debouncing
-    await asyncio.sleep(0.5)
-    # Check if the current request is the last one
-    if request_id == last_request_id:
-        request_data = await request.json()
-        last_response = JSONResponse(predict_and_translate(request_data.get('text')))
-    else:
-        last_response = JSONResponse(content={"message": "debounced"})
 
 
 @app.get("/")
@@ -108,10 +94,14 @@ async def audio_handler(websocket: WebSocket):
 
                 print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
 
+                text_out = []
                 for segment in segments:
+                    text_out.append(segment.text)
                     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 
-                response = {"message": "Audio processed"}
+
+
+                response = {"message": json.dumps(text_out)}
                 await websocket.send_json(response)  # Send a response back to the client
             finally:
                 print("done")

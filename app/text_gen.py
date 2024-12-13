@@ -1,6 +1,23 @@
 #### THIS CODE IS NOT USED RIGHT NOW
 
 
+last_request_id: Optional[int] = None
+last_response: Optional[JSONResponse] = None
+
+
+async def debounce_predict(request_id: int, request: Request):
+    global last_request_id, last_response
+    # Wait for a short period to allow for debouncing
+    await asyncio.sleep(0.5)
+    # Check if the current request is the last one
+    if request_id == last_request_id:
+        request_data = await request.json()
+        last_response = JSONResponse(predict_and_translate(request_data.get('text')))
+    else:
+        last_response = JSONResponse(content={"message": "debounced"})
+
+
+
 @app.post("/predict")
 async def predict_translation(request: Request):
     return {"message": "will run"}

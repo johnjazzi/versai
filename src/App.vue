@@ -6,6 +6,7 @@
           <v-card-text>
             <div class="flex flex-col">
               <!-- Stub for messages -->
+               {{ transcript }}
               <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
               <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div>
               <!-- Add more message stubs as needed -->
@@ -55,7 +56,8 @@ window.BitStream = BitStream;
         volume: 0, // Volume level (0-100)
         audioContext: null,
         analyser: null,
-        microphone: null,        
+        microphone: null,    
+        transcript: null    
       };
     },
     methods: {
@@ -169,6 +171,8 @@ window.BitStream = BitStream;
         this.socket.onmessage = (event) => {
           const data = JSON.parse(event.data);
           // Handle incoming messages from the server
+
+          this.transcript = data.message
           console.log(data.message);
         };
         this.socket.onerror = (error) => {
