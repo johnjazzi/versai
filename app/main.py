@@ -2,17 +2,48 @@ from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisco
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
-import time
-from openai import OpenAI
-import os
+from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Optional
-from llama_cpp import Llama
 from faster_whisper import WhisperModel
-import io
-from pydub import AudioSegment
 import json
+import io
+import threading
+import time
 
 app = FastAPI()
+executor = ThreadPoolExecutor(max_workers=1)
+
+class AudioProcessor:
+    def __init__(self):
+        self.current_task: Optional[Future] = None
+        self.model = WhisperModel("small", device="cpu", compute_type="float32")
+        self.last_prediction_time = 0
+        self.cancel_flag = threading.Event()  # Use an event for cancellation
+
+    def cancel_current_task(self):
+        if time.time() - self.last_prediction_time > 5:
+            if self.current_task and not self.current_task.done():
+                self.cancel_flag.set()  # Set the cancel flag
+                print("Cancelled previous processing task")
+
+    def process_audio(self, audio_data):
+        """Process audio data in a separate thread"""
+        audio_file = io.BytesIO(audio_data)
+        segments, info = self.model.transcribe(audio_file, beam_size=5)
+        
+        text_out = []
+        for segment in segments:
+            if self.cancel_flag.is_set():
+                print("Processing cancelled")
+                return None, None  # Exit early if cancelled
+            text_out.append(segment.text)
+            print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
+        
+        self.last_prediction_time = time.time()
+        self.cancel_flag.clear()  # Clear the flag after processing
+        return text_out, info
+
+audio_processor = AudioProcessor()
 
 app.add_middleware(
     CORSMiddleware,
@@ -28,25 +59,9 @@ def read_root():
     return {"message": "Translator backend is running!"}
 
 
-@app.post("/")
-async def process_request(request: Request):
-    global last_request_id, last_response
-    # Increment the request ID
-    last_request_id = (last_request_id or 0) + 1
-    current_request_id = last_request_id
-
-    # Run the debounce logic
-    await debounce_predict(current_request_id, request)
-
-    # Return the response for the current request
-    return last_response
-
-
-
-
-model_size = "tiny"
+model_size = "small"
 model = WhisperModel(model_size, device="cpu", compute_type="float32")
-
+data = 1
 
 # print("Transcribing...")
 # segments, info = model.transcribe("app/tests/table.m4a", beam_size=5)
@@ -55,61 +70,72 @@ model = WhisperModel(model_size, device="cpu", compute_type="float32")
 #     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
 
 
-data = 1
 
 async def audio_handler(websocket: WebSocket):
-    await websocket.accept()  # Accept the WebSocket connection
-
+    await websocket.accept()
     global data
 
     try:
         while True:
             try:
-                # Set a timeout for receiving data
+                try: 
+                    # Cancel any ongoing processing
+                    audio_processor.cancel_current_task()
 
-                if data == 1:
-                    data = await websocket.receive_bytes()
-                else:
-                    new_file = await websocket.receive_bytes()
-                    data = data + new_file
+                    if data == 1:
+                        data = await websocket.receive_bytes()
+                    else:
+                        new_file = await websocket.receive_bytes()
+                        data = data + new_file
+                except Exception as e:
+                    message = await websocket.receive_text()
+                    print("reset")
+                    if message == "reset":
+                        data = 1
+                        continue
+                    raise e
 
                 print("Received audio data, length:", len(data))
 
-                # Check if the received data is empty
                 if not data:
                     print("Received empty audio data, skipping processing.")
-                    continue  # Skip processing if data is empty
-
-                print("Received audio data (first 20 bytes):", data[:20])
+                    continue
 
                 if not data.startswith(b'\x1A\x45\xDF\xA3'):
                     print("Received data is not in the expected WebM format.")
-                    continue  # Skip processing if data is not valid
+                    continue
 
-                # with open("received_audio.webm", "wb") as audio_file:  
-                #         audio_file.write(data)  
+                # Process audio in a separate thread
+                loop = asyncio.get_event_loop()
+                audio_processor.current_task = loop.run_in_executor(
+                    executor, 
+                    audio_processor.process_audio, 
+                    data
+                )
 
-                audio_file = io.BytesIO(data)
-                segments, info = model.transcribe(audio_file, beam_size=5)
+                try:
+                    text_out, info = await audio_processor.current_task
+                    print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+                    response = {"message": json.dumps(text_out)}
+                    await websocket.send_json(response)
+                except asyncio.CancelledError:
+                    print("Processing was cancelled due to new data")
+                    continue
 
-                print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
-
-                text_out = []
-                for segment in segments:
-                    text_out.append(segment.text)
-                    print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-
-
-
-                response = {"message": json.dumps(text_out)}
-                await websocket.send_json(response)  # Send a response back to the client
+            except WebSocketDisconnect:
+                print("Client disconnected")
+                break
+            except Exception as e:
+                print(f"Error processing audio: {e}")
+                continue
             finally:
-                print("done")
-            # except asyncio.TimeoutError():
-            #     print("No data received for 5 seconds, stopping processing.")
-            #     break  # Exit the loop without closing the connection
+                print("Processing complete")
+
     except WebSocketDisconnect:
         print("Client disconnected")
+    finally:
+        print("WebSocket connection closed")
+        data = 1  # Reset the data state for next connection
 
 @app.websocket("/audio")
 async def websocket_endpoint(websocket: WebSocket):

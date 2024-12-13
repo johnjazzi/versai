@@ -1,49 +1,39 @@
 <template>
     <v-app>
       <v-container fluid class="flex flex-col justify-between h-screen">
+
+        <div class="flex flex-col items-center justify-center flex-grow">
+          <v-btn @click="toggleRecording" icon="mdi-microphone" class="mb-2">
+            <v-icon>mdi-microphone</v-icon>
+          </v-btn>
+          <span v-if="isRecording">Recording...</span>
+          <span v-else>Start Recording</span>
+          <v-progress-circular v-if="isRecording" :size="100" :width="10" :value="Math.round(volume)" color="green"></v-progress-circular>
+        </div>
         <v-card class="overflow-y-auto flex-grow">
-          <v-card-title>Chat</v-card-title>
+          <v-card-title>Transcript</v-card-title>
           <v-card-text>
             <div class="flex flex-col">
               <!-- Stub for messages -->
                {{ transcript }}
-              <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
-              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div>
+              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
+              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
               <!-- Add more message stubs as needed -->
             </div>
           </v-card-text>
         </v-card>
-        <v-textarea
-          v-model="textInput"
+        <!-- <v-textarea
+          v-model="textInput"a
           label="Enter text to translate"
           @input="handleInput"
           class="mt-2"
-        ></v-textarea>
-        <div class="flex justify-center mt-2">
-          <v-btn @click="toggleRecording" icon="mdi-microphone">
-            <span v-if="isRecording">Recording...</span>
-            <span v-else>Start Recording</span>
-          </v-btn>
-        </div>
-        <div v-if="isRecording" class="mt-2">
-          <div class="volume-bar" :style="{ width: volume + '%' }"></div>
-        </div>
+        ></v-textarea> -->
+
       </v-container>
     </v-app>
   </template>
   
 <script>
-
-import lamejs from 'lamejs';
-
-import MPEGMode from 'lamejs/src/js/MPEGMode';
-import Lame from 'lamejs/src/js/Lame';
-import BitStream from 'lamejs/src/js/BitStream';
-
-
-window.MPEGMode = MPEGMode;
-window.Lame = Lame;
-window.BitStream = BitStream;
   
   export default {
     data() {
@@ -98,6 +88,7 @@ window.BitStream = BitStream;
         }
       },
       async startRecording() {
+        console.log('start recording')
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           this.mediaRecorder = new MediaRecorder(stream, { 
@@ -133,16 +124,24 @@ window.BitStream = BitStream;
           };
 
           this.mediaRecorder.onstart = () => {
-            console.log('Recording started');
             updateVolume(); // Start updating the volume
           };
 
+          setInterval(() => {
+              if (this.isRecording) {
+                this.mediaRecorder.stop()
+                this.mediaRecorder.start(2000)
+                console.log('resetting')
+                this.sendReset()
+              }
+            }, 10000
+          )
+
           this.mediaRecorder.onstop = () => {
-            this.audioContext.close(); // Close the audio context
-            console.log('Recording stopped');
+            //this.audioContext.close(); // Close the audio context
           };
 
-          this.mediaRecorder.start(1000); // Start recording with a timeslice of 100ms
+          this.mediaRecorder.start(2000); // Start recording with a timeslice of 100ms
           this.isRecording = true;
         } catch (error) {
           console.error('Error accessing microphone:', error);
@@ -156,11 +155,21 @@ window.BitStream = BitStream;
         }
       },
       async sendAudio(audioBlob) {
-        if (!this.socket?.readyState !== WebSocket.OPEN) {
-            await this.startWebSocket();
-            await new Promise(r => setTimeout(r, 100)); // Simple wait for connection
+        await this.checkWSReady()
+        
+        if (this.socket.readyState === WebSocket.OPEN) {
+            this.socket.send(audioBlob);
+        } else {
+            console.error('WebSocket is not in OPEN state');
         }
-        this.socket.send(audioBlob);
+      },
+      async sendReset() {
+        await this.checkWSReady()
+        if (this.socket.readyState === WebSocket.OPEN) {
+          this.socket.send('reset');
+        } else {
+            console.error('WebSocket is not in OPEN state');
+        }
       },
       async startWebSocket() {
         this.socket = new WebSocket('ws://localhost:8000/audio'); // Connect to WebSocket server
@@ -182,6 +191,19 @@ window.BitStream = BitStream;
           console.log('WebSocket connection closed');
         };
       },
+      async checkWSReady() {
+        if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
+            await this.startWebSocket();
+            // Wait for connection to be established
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('WebSocket connection timeout')), 500);
+                this.socket.onopen = () => {
+                    clearTimeout(timeout);
+                    resolve();
+                };
+            });
+        }
+      }
     },
   };
   </script>

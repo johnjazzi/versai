@@ -1,5 +1,19 @@
 #### THIS CODE IS NOT USED RIGHT NOW
+from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import asyncio
+import time
+from openai import OpenAI
+import os
+from typing import Optional
+from llama_cpp import Llama
+from faster_whisper import WhisperModel
+import io
+from pydub import AudioSegment
+import json
 
+from main import app
 
 last_request_id: Optional[int] = None
 last_response: Optional[JSONResponse] = None
@@ -16,6 +30,18 @@ async def debounce_predict(request_id: int, request: Request):
     else:
         last_response = JSONResponse(content={"message": "debounced"})
 
+@app.post("/")
+async def process_request(request: Request):
+    global last_request_id, last_response
+    # Increment the request ID
+    last_request_id = (last_request_id or 0) + 1
+    current_request_id = last_request_id
+
+    # Run the debounce logic
+    await debounce_predict(current_request_id, request)
+
+    # Return the response for the current request
+    return last_response
 
 
 @app.post("/predict")
