@@ -8,7 +8,8 @@
           </v-btn>
           <span v-if="isRecording">Recording...</span>
           <span v-else>Start Recording</span>
-          <v-progress-circular v-if="isRecording" :size="100" :width="10" :value="Math.round(volume)" color="green"></v-progress-circular>
+          <v-progress-circular v-if="isRecording" :size="100" :width="10" :model-value="Math.round(volume)" color="green"></v-progress-circular>
+
         </div>
         <v-card class="overflow-y-auto flex-grow">
           <v-card-title>Transcript</v-card-title>
@@ -96,11 +97,18 @@
             audioBitsPerSecond: 128000
         });
           
-          // Set up audio context and analyser
+          // Set up audio context, gain node, and analyser
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.gainNode = this.audioContext.createGain(); // Create a gain node
+          this.gainNode.gain.value = 128; // Set gain value to amplify the audio (2x amplification)
+
           this.analyser = this.audioContext.createAnalyser();
           this.microphone = this.audioContext.createMediaStreamSource(stream);
-          this.microphone.connect(this.analyser);
+          
+          // Connect nodes: microphone -> gainNode -> analyser
+          this.microphone.connect(this.gainNode);
+          this.gainNode.connect(this.analyser);
+
           this.analyser.fftSize = 2048;
 
           const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
@@ -166,7 +174,7 @@
       async sendReset() {
         await this.checkWSReady()
         if (this.socket.readyState === WebSocket.OPEN) {
-          this.socket.send('reset');
+          this.socket.send(JSON.stringify({ reset: true }));
         } else {
             console.error('WebSocket is not in OPEN state');
         }

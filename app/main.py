@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request, BackgroundTasks, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.websockets import WebSocketState
 import asyncio
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Optional
@@ -21,6 +22,7 @@ class AudioProcessor:
         self.cancel_flag = threading.Event()  # Use an event for cancellation
 
     def cancel_current_task(self):
+        # cancel the tasks but if its been more than 5 seconds, dont cancel it an let at least 1 through.
         if time.time() - self.last_prediction_time > 5:
             if self.current_task and not self.current_task.done():
                 self.cancel_flag.set()  # Set the cancel flag
@@ -72,59 +74,78 @@ data = 1
 
 
 async def audio_handler(websocket: WebSocket):
-    await websocket.accept()
     global data
 
     try:
+        await websocket.accept()  # Ensure the WebSocket is accepted
         while True:
             try:
-                try: 
-                    # Cancel any ongoing processing
-                    audio_processor.cancel_current_task()
+                # Cancel any ongoing processing
+                audio_processor.cancel_current_task()
 
-                    if data == 1:
-                        data = await websocket.receive_bytes()
-                    else:
-                        new_file = await websocket.receive_bytes()
-                        data = data + new_file
-                except Exception as e:
-                    message = await websocket.receive_text()
-                    print("reset")
-                    if message == "reset":
-                        data = 1
-                        continue
-                    raise e
+                if data == 1:
+                    data = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                else:
+                    new_file = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                    data = data + new_file
 
-                print("Received audio data, length:", len(data))
+            except asyncio.TimeoutError:
+                print("No data received for 10 seconds, closing connection.")
+                data = 1 
+                await websocket.close()
+                break  # Exit the loop if no data is received within the timeout
+            
+            except WebSocketDisconnect:
+                data = 1 
+                await websocket.close()
+                print("Client disconnected")
+                break  # Break the loop on WebSocket disconnect
 
-                if not data:
-                    print("Received empty audio data, skipping processing.")
-                    continue
-
-                if not data.startswith(b'\x1A\x45\xDF\xA3'):
-                    print("Received data is not in the expected WebM format.")
-                    continue
-
-                # Process audio in a separate thread
-                loop = asyncio.get_event_loop()
-                audio_processor.current_task = loop.run_in_executor(
-                    executor, 
-                    audio_processor.process_audio, 
-                    data
-                )
-
+            except Exception as e:
+                print(f"{e}")
                 try:
-                    text_out, info = await audio_processor.current_task
-                    print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+                    message = await websocket.receive_text()
+                    print(message)
+                    print("printing at websocket recive line 106" , message['type'])
+                    if message['reset'] == True:
+                        data = 1
+                except Exception as e:
+                    print(f"Error receiving data: {e}")
+                    data = 1
+                    await websocket.close()
+                    break
+
+            print("Received audio data, length:", len(data))
+
+            if not data:
+                print("Received empty audio data, skipping processing.")
+                continue
+
+            if not data.startswith(b'\x1A\x45\xDF\xA3'):
+                print("Received data is not in the expected WebM format.")
+                continue
+
+            # Process audio in a separate thread
+            loop = asyncio.get_event_loop()
+            audio_processor.current_task = loop.run_in_executor(
+                executor, 
+                audio_processor.process_audio, 
+                data
+            )
+
+            try:
+                text_out, info = await audio_processor.current_task
+                print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
+                response = {"message": json.dumps(text_out)}
+                if websocket.client_state == WebSocketState.CONNECTED:
                     response = {"message": json.dumps(text_out)}
                     await websocket.send_json(response)
-                except asyncio.CancelledError:
-                    print("Processing was cancelled due to new data")
-                    continue
+                else:
+                    print("WebSocket is not connected, skipping send.")
 
-            except WebSocketDisconnect:
-                print("Client disconnected")
-                break
+            except asyncio.CancelledError:
+                print("Processing was cancelled due to new data")
+                continue
             except Exception as e:
                 print(f"Error processing audio: {e}")
                 continue
@@ -141,4 +162,7 @@ async def audio_handler(websocket: WebSocket):
 async def websocket_endpoint(websocket: WebSocket):
     await audio_handler(websocket)
     
-    
+
+@app.on_event("shutdown")
+def shutdown_event():
+    executor.shutdown(wait=True)  # Wait for all threads to finish
