@@ -78,12 +78,16 @@ for segment in segments:
 
 async def audio_handler(websocket: WebSocket):
     await websocket.accept()  # Accept the WebSocket connection
+
+    data = []
+
     try:
         while True:
             try:
                 # Set a timeout for receiving data
 
                 data = await websocket.receive_bytes()
+
                 print("Received audio data, length:", len(data))
 
                 # Check if the received data is empty

@@ -125,17 +125,6 @@ window.BitStream = BitStream;
           this.mediaRecorder.ondataavailable = async (event) => {
             if (this.isRecording) {
                 const audioBlob = new Blob([event.data], { type: 'audio/webm' });
-
-                const url = window.URL.createObjectURL(audioBlob);
-                const a = document.createElement('a');
-                a.style.display = 'none';
-                a.href = url;
-                a.download = `audio-${Date.now()}.webm`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
                 console.log(audioBlob)
                 await this.sendAudio(audioBlob);
             }
