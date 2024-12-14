@@ -63,7 +63,7 @@ def read_root():
 
 model_size = "small"
 model = WhisperModel(model_size, device="cpu", compute_type="float32")
-data = 1
+data = None
 
 # print("Transcribing...")
 # segments, info = model.transcribe("app/tests/table.m4a", beam_size=5)
@@ -75,6 +75,7 @@ data = 1
 
 async def audio_handler(websocket: WebSocket):
     global data
+    data = None # reset the data state for next connection
 
     try:
         await websocket.accept()  # Ensure the WebSocket is accepted
@@ -84,43 +85,28 @@ async def audio_handler(websocket: WebSocket):
                 ## attempt to decode
                 message = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
                 if message == b'{"reset":true}':
-                    data = 1
+                    data = None
                     print("resetting chunk")
                     continue
 
-                if data == 1:
+                if data == None:
                     data = message
                 else:
                     data = data + message
 
             except asyncio.TimeoutError:
                 print("No data received for 10 seconds, closing connection.")
-                data = 1 
+                data = None
                 if websocket.client_state == WebSocketState.CONNECTED:  # Check if connected before closing
                     await websocket.close()
                 break  # Exit the loop if no data is received within the timeout
             
             except WebSocketDisconnect:
-                data = 1 
+                data = None
                 if websocket.client_state == WebSocketState.CONNECTED:  # Check if connected before closing
                     await websocket.close()
                 print("Client disconnected")
                 break  # Break the loop on WebSocket disconnect
-
-            except Exception as e:
-                print(f"{e}")
-                try:
-                    message = await websocket.receive_text()
-                    print(message)
-                    print("printing at websocket recive line 106" , message['type'])
-                    if message['reset'] == True:
-                        data = 1
-                except Exception as e:
-                    print(f"Error receiving data: {e}")
-                    data = 1
-                    if websocket.client_state == WebSocketState.CONNECTED:  # Check if connected before closing
-                        await websocket.close()
-                    break
 
             print("Received audio data, length:", len(data))
 
@@ -164,7 +150,7 @@ async def audio_handler(websocket: WebSocket):
         print("Client disconnected")
     finally:
         print("WebSocket connection closed")
-        data = 1  # Reset the data state for next connection
+        data = None  # Reset the data state for next connection
 
 @app.websocket("/audio")
 async def websocket_endpoint(websocket: WebSocket):

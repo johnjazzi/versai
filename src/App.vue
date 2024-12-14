@@ -8,6 +8,7 @@
           </v-btn>
           <span v-if="isRecording">Recording...</span>
           <span v-else>Start Recording</span>
+          current track: {{ currentTrack }}
           <v-progress-circular v-if="isRecording" :size="100" :width="10" :model-value="Math.round(volume)" color="green"></v-progress-circular>
 
         </div>
@@ -29,6 +30,13 @@
           @input="handleInput"
           class="mt-2"
         ></v-textarea> -->
+
+        <v-snackbar v-for="alert in alerts" v-model="alert.visible" color="error">
+          {{ alert.message }}
+          <template v-slot:action="{ attrs }">
+            <v-btn text v-bind="attrs" @click="alert.visible = false">Close</v-btn>
+          </template>
+        </v-snackbar>
 
       </v-container>
     </v-app>
@@ -53,7 +61,9 @@
         analyser: null,
         microphone: null,    
         transcript: null,
+        isResetPending: false,
         unsentChunks: [], // Buffer for failed chunks
+        alerts : [], // Snackbar message
       };
     },
     methods: {
@@ -73,7 +83,7 @@
           this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
           this.recorders[0] = await this.createMediaRecorder(0);
-          this.recorders[1] = await this.createMediaRecorder(0);
+          this.recorders[1] = await this.createMediaRecorder(1);
           this.currentTrack = 0;
           this.recorders[0].start(this.mediaRecorderInterval);
           this.isRecording = true;
@@ -102,8 +112,6 @@
           setInterval(() => {
               if (this.isRecording) {
                 this.switchTrack()
-                console.log('resetting')
-                this.sendReset()
               }
             }, this.trackSwitchInterval // 10 seconds`
           )
@@ -113,37 +121,35 @@
           console.error('Error accessing microphone:', error);
         }
       },
-      switchTrack() {
+      async switchTrack() {
         const prevTrack = this.currentTrack;
         const nextTrack = (this.currentTrack + 1) % 2;
-
-        // Stop the current recorder
-        if (this.recorders[prevTrack] && this.recorders[prevTrack].state !== "inactive") {
-          this.recorders[prevTrack].stop();
-        }
-
-        // Start the next recorder
+        console.log("switching tracks from", prevTrack, "to", nextTrack)
         this.recorders[nextTrack].start(this.mediaRecorderInterval);
-
-        // Reinitialize the stopped track
-        this.recorders[prevTrack] = this.createMediaRecorder(prevTrack);
-
-        // Update the current track
+        this.recorders[prevTrack].stop();
+        this.recorders[prevTrack] = null
+        // TODO: its really going to depend when I send the reset. if I send before the previous 
+        this.isResetPending = true
+        this.recorders[prevTrack] = await this.createMediaRecorder(prevTrack);
         this.currentTrack = nextTrack;
       },
       async createMediaRecorder(trackIndex) {
-        const recorder = await new MediaRecorder(this.mediaStream, { mimeType: "audio/webm" });
+        const recorder = new MediaRecorder(this.mediaStream, { mimeType: "audio/webm" });
 
         recorder.ondataavailable = async (event) => {
             if (this.isRecording) {
                 const audioBlob = new Blob([event.data], { type: 'audio/webm' });
-                console.log(audioBlob)
+                console.log(audioBlob, `Track ${trackIndex}`)
                 await this.sendAudio(audioBlob);
+                if (this.isResetPending) {
+                  this.sendReset()
+                  this.isResetPending = false
+                }
             }
           };
 
         recorder.onstop = () => {
-          console.log(`Track ${trackIndex + 1} stopped.`);
+          console.log(`Track ${trackIndex} stopped.`);
         };
 
         return recorder;
@@ -168,7 +174,7 @@
         }
       },
       async sendReset() {
-        await this.checkWSReady()
+        console.log("sending reset")
         if (this.socket.readyState === WebSocket.OPEN) {
           this.socket.send(new Blob([JSON.stringify({ reset: true })]));
         } else {
@@ -176,14 +182,22 @@
         }
       },
       async startWebSocket() {
-        this.socket = new WebSocket('ws://localhost:8000/audio'); // Connect to WebSocket server
+        try {
+          this.socket = new WebSocket('ws://localhost:8000/audio'); // Connect to WebSocket server
+        } catch (error) {
+          console.error('Error connecting to WebSocket:', error);
+          this.alerts.push({
+            Message: error.message,
+            visible: true
+          })
+        }
         this.socket.onopen = () => {
-          console.log('WebSocket connection established');
-          // Start audio recording logic here
-        };
+            console.log('WebSocket connection established');
+            // Start audio recording logic here
+          };
         this.socket.onmessage = (event) => {
           const data = JSON.parse(event.data);
-          this.transcript = data.message
+          this.transcript = data.message;
           console.log(data.message);
         };
         this.socket.onerror = (error) => {
@@ -191,7 +205,7 @@
         };
         this.socket.onclose = () => {
           console.log('WebSocket connection closed');
-          this.socket = null
+          this.socket = null;
         };
       },
       async checkWSReady() {
@@ -200,14 +214,14 @@
             await this.startWebSocket();
             // Wait for connection to be established
             await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => reject(new Error('WebSocket connection timeout')), 50);
+                const timeout = setTimeout(() => reject(new Error('WebSocket connection timeout')), 500);
                 this.socket.onopen = () => {
                     clearTimeout(timeout);
                     resolve();
                 };
             });
         }
-      }
+      },
     },
   };
   </script>
