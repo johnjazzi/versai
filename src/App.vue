@@ -1,3 +1,5 @@
+
+
 <template>
     <v-app>
       <v-container fluid class="flex flex-col justify-between h-screen">
@@ -38,13 +40,26 @@
           </template>
         </v-snackbar>
 
+        <v-dialog v-model="modelLoading" persistent>
+          <v-card class="flex items-center justify-center"> 
+            <v-card-title>
+              Loading model..
+            </v-card-title>
+            <v-card-text>
+              <v-progress-circular indeterminate color="primary" :size="150" :width="15"></v-progress-circular>
+            </v-card-text>
+          </v-card>
+        </v-dialog>
+
       </v-container>
     </v-app>
   </template>
   
 <script>
 
-import { AutoTokenizer, AutoModelForSeq2SeqLM , pipeline} from '@huggingface/transformers';
+// son of a bitch: https://github.com/xenova/whisper-web/
+
+import { pipeline} from '@xenova/transformers';
   
   export default {
     data() {
@@ -82,11 +97,13 @@ import { AutoTokenizer, AutoModelForSeq2SeqLM , pipeline} from '@huggingface/tra
       this.modelLoading = true
       console.log("loading model")
       const model = "Xenova/nllb-200-distilled-600M"
+      
       this.pipe = await pipeline('translation', model);
       console.log("model loaded")
       console.log('testing model')
       console.log(await this.pipe("Hello, how are you?", {src_lang: "eng_Latn", tgt_lang: "por_Latn"}))
       this.modelLoading = false
+      
     },
     methods: {
       async translate(text, sourceLang, targetLang) {
