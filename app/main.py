@@ -130,9 +130,8 @@ async def audio_handler(websocket: WebSocket):
             try:
                 text_out, info = await audio_processor.current_task
                 print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
-                response = {"message": json.dumps(text_out)}
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    response = {"message": json.dumps(text_out)}
+                    response = {"message": json.dumps(text_out), "info": json.dumps(info.language)}
                     await websocket.send_json(response)
                 else:
                     print("WebSocket is not connected, skipping send.")

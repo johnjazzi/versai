@@ -15,6 +15,7 @@
     "vite": "^6.0.1"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.1.2",
     "@mdi/font": "^7.4.47",
     "@mediapipe/tasks-genai": "^0.10.18",
     "@vitejs/plugin-vue": "^5.2.1",

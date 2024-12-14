@@ -43,6 +43,8 @@
   </template>
   
 <script>
+
+import { AutoTokenizer, AutoModelForSeq2SeqLM , pipeline} from '@huggingface/transformers';
   
   export default {
     data() {
@@ -61,12 +63,36 @@
         analyser: null,
         microphone: null,    
         transcript: null,
+        translatedTranscript: null,
         isResetPending: false,
         unsentChunks: [], // Buffer for failed chunks
         alerts : [], // Snackbar message
+        translationModel: null,
+        translationTokenizer: null,
+        pipe: null,
+        modelLoading: false,
+        langMap: {
+          'en': 'eng_Latn',
+          'pt': 'por_Latn'
+        },
       };
     },
+    async mounted() {
+      // this.pipe = await pipeline("translation", "Helsinki-NLP/opus-mt-en-roa")
+      this.modelLoading = true
+      console.log("loading model")
+      const model = "Xenova/nllb-200-distilled-600M"
+      this.pipe = await pipeline('translation', model);
+      console.log("model loaded")
+      console.log('testing model')
+      console.log(await this.pipe("Hello, how are you?", {src_lang: "eng_Latn", tgt_lang: "por_Latn"}))
+      this.modelLoading = false
+    },
     methods: {
+      async translate(text, sourceLang, targetLang) {
+        return this.pipe(text, {src_lang: this.langMap[sourceLang], tgt_lang: this.langMap[targetLang]}); 
+      },
+
       async toggleRecording() {
         if (this.isRecording) {
           this.stopRecording();
@@ -195,10 +221,20 @@
             console.log('WebSocket connection established');
             // Start audio recording logic here
           };
-        this.socket.onmessage = (event) => {
-          const data = JSON.parse(event.data);
-          this.transcript = data.message;
-          console.log(data.message);
+        this.socket.onmessage = async (event) => {
+          const message = JSON.parse(event.data).message;
+          const lang = JSON.parse(event.data).info
+          this.transcript = message;
+          console.log(event.data);
+
+          if (lang === "pt") {
+            this.translatedTranscript = await this.translate(message, lang, "en")
+          } else {
+            this.translatedTranscript = await this.translate(message, lang, "pt")
+          }
+
+          console.log(this.translatedTranscript)
+
         };
         this.socket.onerror = (error) => {
           console.error('WebSocket error:', error);
