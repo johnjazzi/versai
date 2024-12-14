@@ -80,24 +80,30 @@ async def audio_handler(websocket: WebSocket):
         await websocket.accept()  # Ensure the WebSocket is accepted
         while True:
             try:
-                # Cancel any ongoing processing
-                audio_processor.cancel_current_task()
+
+                ## attempt to decode
+                message = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                if message == b'{"reset":true}':
+                    data = 1
+                    print("resetting chunk")
+                    continue
 
                 if data == 1:
-                    data = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
+                    data = message
                 else:
-                    new_file = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
-                    data = data + new_file
+                    data = data + message
 
             except asyncio.TimeoutError:
                 print("No data received for 10 seconds, closing connection.")
                 data = 1 
-                await websocket.close()
+                if websocket.client_state == WebSocketState.CONNECTED:  # Check if connected before closing
+                    await websocket.close()
                 break  # Exit the loop if no data is received within the timeout
             
             except WebSocketDisconnect:
                 data = 1 
-                await websocket.close()
+                if websocket.client_state == WebSocketState.CONNECTED:  # Check if connected before closing
+                    await websocket.close()
                 print("Client disconnected")
                 break  # Break the loop on WebSocket disconnect
 
@@ -112,7 +118,8 @@ async def audio_handler(websocket: WebSocket):
                 except Exception as e:
                     print(f"Error receiving data: {e}")
                     data = 1
-                    await websocket.close()
+                    if websocket.client_state == WebSocketState.CONNECTED:  # Check if connected before closing
+                        await websocket.close()
                     break
 
             print("Received audio data, length:", len(data))
@@ -126,6 +133,7 @@ async def audio_handler(websocket: WebSocket):
                 continue
 
             # Process audio in a separate thread
+            audio_processor.cancel_current_task() # cancel the current task
             loop = asyncio.get_event_loop()
             audio_processor.current_task = loop.run_in_executor(
                 executor, 
