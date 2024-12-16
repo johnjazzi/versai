@@ -10,28 +10,40 @@ import json
 import io
 import threading
 import time
+import subprocess
+from datetime import datetime
+
+import transformers
+import ctranslate2
+
 
 app = FastAPI()
-executor = ThreadPoolExecutor(max_workers=1)
+executor = ThreadPoolExecutor(max_workers=12)
+
 
 class AudioProcessor:
     def __init__(self):
+        print("init audio processor")
         self.current_task: Optional[Future] = None
         self.model = WhisperModel("small", device="cpu", compute_type="float32")
-        self.last_prediction_time = 0
+        self.last_prediction_time = datetime.now()
         self.cancel_flag = threading.Event()  # Use an event for cancellation
 
     def cancel_current_task(self):
         # cancel the tasks but if its been more than 5 seconds, dont cancel it an let at least 1 through.
-        if time.time() - self.last_prediction_time > 5:
+        if (datetime.now() - self.last_prediction_time).total_seconds() < 2:
             if self.current_task and not self.current_task.done():
                 self.cancel_flag.set()  # Set the cancel flag
                 print("Cancelled previous processing task")
 
-    def process_audio(self, audio_data):
+    def process_audio(self, audio_data, websocket: WebSocket):
+        start_time = datetime.now()
         """Process audio data in a separate thread"""
         audio_file = io.BytesIO(audio_data)
-        segments, info = self.model.transcribe(audio_file, beam_size=5)
+        segments, info = self.model.transcribe(
+            audio_file, 
+            beam_size=5
+        )
         
         text_out = []
         for segment in segments:
@@ -40,12 +52,85 @@ class AudioProcessor:
                 return None, None  # Exit early if cancelled
             text_out.append(segment.text)
             print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-        
-        self.last_prediction_time = time.time()
-        self.cancel_flag.clear()  # Clear the flag after processing
-        return text_out, info
+
+        self.last_prediction_time = datetime.now()
+        time_taken = self.last_prediction_time - start_time
+        print(f"Transcription Took: {time_taken} milliseconds")
+
+        start_time = datetime.now()
+        translate_out = translator.translate_text(" ".join(text_out), source_lang=info.language)
+        end_time = datetime.now()
+        time_taken = end_time - start_time
+        print(f"Translation Took: {time_taken} milliseconds")
+
+        print(translate_out)
+
+        if websocket and websocket.client_state == WebSocketState.CONNECTED:
+            response = {    
+                "message": json.dumps(text_out),
+                "info": json.dumps(info.language),
+                "translation": json.dumps(translate_out)
+            }
+            asyncio.run( websocket.send_json(response))
+           
+
+        return 
+    
+    async def send_response(self, websocket: WebSocket, text_out, info, translate_out):
+        # This function will handle sending the response back to the client
+        if websocket.client_state == WebSocketState.CONNECTED:
+            response = {    
+                "message": json.dumps(text_out),
+                "info": json.dumps(info.language),
+                "translation": json.dumps(translate_out)
+            }
+            await websocket.send_json(response)
+    
+
+class Translator: 
+    def __init__(self):
+        print("init translator")
+        self.current_task: Optional[Future] = None
+        self.translator = ctranslate2.Translator("./app/models/nllb-200-distilled-600M")
+        self.tokenizer_eng = transformers.AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang="eng_Latn")
+        self.tokenizer_por = transformers.AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang="por_Latn")
+        self.language_map = {
+            "en": "eng_Latn",
+            "pt": "por_Latn"
+        }
+        self.last_prediction_time = datetime.now()
+        self.cancel_flag = threading.Event()  # Use an event for cancellation
+
+    def translate_text(self, text, source_lang="en", target_lang="pt"):
+        start_time = datetime.now()
+
+        if source_lang == "en":
+            tokenizer = self.tokenizer_eng
+            target_lang = "pt"
+        else:
+            tokenizer = self.tokenizer_por
+            target_lang = "en"
+
+        source = tokenizer.convert_ids_to_tokens(tokenizer.encode(text))
+        target_prefix = [self.language_map[target_lang]]
+        results = self.translator.translate_batch([source], target_prefix=[target_prefix])
+        target = results[0].hypotheses[0][1:]
+
+        return tokenizer.decode(tokenizer.convert_tokens_to_ids(target))
+
 
 audio_processor = AudioProcessor()
+translator = Translator()
+
+#warm up the model
+# TODO: have warm settings be in configs
+# print("warming up models")
+# warm_up_audio = open('./app/tests/table.m4a', 'rb').read()
+# audio_processor.process_audio(warm_up_audio, None)
+# warm_up_text = "welcome to advance python"
+# translator.translate_text(warm_up_text, source_lang="en", target_lang="pt")
+# print("models warmed up")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,17 +149,14 @@ def read_root():
 model_size = "small"
 model = WhisperModel(model_size, device="cpu", compute_type="float32")
 data = None
-
-# print("Transcribing...")
-# segments, info = model.transcribe("app/tests/table.m4a", beam_size=5)
-# print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
-# for segment in segments:
-#     print("[%.2fs -> %.2fs] %s" % (segment.start, segment.end, segment.text))
-
+transcript = []
+last_transcription = None
 
 
 async def audio_handler(websocket: WebSocket):
     global data
+    global transcript
+    global last_transcription
     data = None # reset the data state for next connection
 
     try:
@@ -85,6 +167,7 @@ async def audio_handler(websocket: WebSocket):
                 ## attempt to decode
                 message = await asyncio.wait_for(websocket.receive_bytes(), timeout=10.0)
                 if message == b'{"reset":true}':
+                    transcript.append(last_transcription)
                     data = None
                     print("resetting chunk")
                     continue
@@ -109,6 +192,7 @@ async def audio_handler(websocket: WebSocket):
                 break  # Break the loop on WebSocket disconnect
 
             print("Received audio data, length:", len(data))
+            print()
 
             if not data:
                 print("Received empty audio data, skipping processing.")
@@ -118,38 +202,23 @@ async def audio_handler(websocket: WebSocket):
                 print("Received data is not in the expected WebM format.")
                 continue
 
-            # Process audio in a separate thread
-            audio_processor.cancel_current_task() # cancel the current task
-            loop = asyncio.get_event_loop()
-            audio_processor.current_task = loop.run_in_executor(
-                executor, 
-                audio_processor.process_audio, 
-                data
+            thread = threading.Thread(
+                target=audio_processor.process_audio, 
+                args=(data, websocket)
             )
-
-            try:
-                text_out, info = await audio_processor.current_task
-                print("Detected language '%s' with probability %f" % (info.language, info.language_probability))
-                if websocket.client_state == WebSocketState.CONNECTED:
-                    response = {"message": json.dumps(text_out), "info": json.dumps(info.language)}
-                    await websocket.send_json(response)
-                else:
-                    print("WebSocket is not connected, skipping send.")
-
-            except asyncio.CancelledError:
-                print("Processing was cancelled due to new data")
-                continue
-            except Exception as e:
-                print(f"Error processing audio: {e}")
-                continue
-            finally:
-                print("Processing complete")
+            thread.start()
 
     except WebSocketDisconnect:
         print("Client disconnected")
     finally:
         print("WebSocket connection closed")
         data = None  # Reset the data state for next connection
+
+
+@app.get("/translate")
+def translate_text(text: str, source_lang: str, target_lang: str):
+    return translator.translate_text(text, source_lang, target_lang)
+
 
 @app.websocket("/audio")
 async def websocket_endpoint(websocket: WebSocket):

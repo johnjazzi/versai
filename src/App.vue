@@ -10,7 +10,6 @@
           </v-btn>
           <span v-if="isRecording">Recording...</span>
           <span v-else>Start Recording</span>
-          current track: {{ currentTrack }}
           <v-progress-circular v-if="isRecording" :size="100" :width="10" :model-value="Math.round(volume)" color="green"></v-progress-circular>
 
         </div>
@@ -20,6 +19,16 @@
             <div class="flex flex-col">
               <!-- Stub for messages -->
                {{ transcript }}
+              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
+              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
+              <!-- Add more message stubs as needed -->
+            </div>
+          </v-card-text>
+          <v-card-title>Translation - portuguese</v-card-title>
+          <v-card-text>
+            <div class="flex flex-col">
+              <!-- Stub for messages -->
+               {{ translation }}
               <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
               <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
               <!-- Add more message stubs as needed -->
@@ -40,17 +49,6 @@
           </template>
         </v-snackbar>
 
-        <v-dialog v-model="modelLoading" persistent>
-          <v-card class="flex items-center justify-center"> 
-            <v-card-title>
-              Loading model..
-            </v-card-title>
-            <v-card-text>
-              <v-progress-circular indeterminate color="primary" :size="150" :width="15"></v-progress-circular>
-            </v-card-text>
-          </v-card>
-        </v-dialog>
-
       </v-container>
     </v-app>
   </template>
@@ -70,22 +68,18 @@ import { pipeline} from '@xenova/transformers';
         recorders: [null, null], // Two MediaRecorder instances
         currentTrack: 0, // 0 for Track 1, 1 for Track 2
         mediaRecorder: null,
-        mediaRecorderInterval: 2500,
-        trackSwitchInterval: 10000,
+        mediaRecorderInterval: 5000,
+        trackSwitchInterval: 5000,
         isRecording: false,
         volume: 0, // Volume level (0-100)
         audioContext: null,
         analyser: null,
         microphone: null,    
         transcript: null,
-        translatedTranscript: null,
+        translation: null,
         isResetPending: false,
         unsentChunks: [], // Buffer for failed chunks
         alerts : [], // Snackbar message
-        translationModel: null,
-        translationTokenizer: null,
-        pipe: null,
-        modelLoading: false,
         langMap: {
           'en': 'eng_Latn',
           'pt': 'por_Latn'
@@ -93,23 +87,8 @@ import { pipeline} from '@xenova/transformers';
       };
     },
     async mounted() {
-      // this.pipe = await pipeline("translation", "Helsinki-NLP/opus-mt-en-roa")
-      this.modelLoading = true
-      console.log("loading model")
-      const model = "Xenova/nllb-200-distilled-600M"
-      
-      this.pipe = await pipeline('translation', model);
-      console.log("model loaded")
-      console.log('testing model')
-      console.log(await this.pipe("Hello, how are you?", {src_lang: "eng_Latn", tgt_lang: "por_Latn"}))
-      this.modelLoading = false
-      
     },
     methods: {
-      async translate(text, sourceLang, targetLang) {
-        return this.pipe(text, {src_lang: this.langMap[sourceLang], tgt_lang: this.langMap[targetLang]}); 
-      },
-
       async toggleRecording() {
         if (this.isRecording) {
           this.stopRecording();
@@ -159,6 +138,7 @@ import { pipeline} from '@xenova/transformers';
             }, this.trackSwitchInterval // 10 seconds`
           )
 
+          updateVolume()
           this.isRecording = true;
         } catch (error) {
           console.error('Error accessing microphone:', error);
@@ -241,16 +221,10 @@ import { pipeline} from '@xenova/transformers';
         this.socket.onmessage = async (event) => {
           const message = JSON.parse(event.data).message;
           const lang = JSON.parse(event.data).info
+          const translation = JSON.parse(event.data).translation
           this.transcript = message;
+          this.translation = translation;
           console.log(event.data);
-
-          if (lang === "pt") {
-            this.translatedTranscript = await this.translate(message, lang, "en")
-          } else {
-            this.translatedTranscript = await this.translate(message, lang, "pt")
-          }
-
-          console.log(this.translatedTranscript)
 
         };
         this.socket.onerror = (error) => {
