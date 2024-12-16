@@ -25,7 +25,7 @@ class AudioProcessor:
     def __init__(self):
         print("init audio processor")
         self.current_task: Optional[Future] = None
-        self.model = WhisperModel("small", device="cpu", compute_type="float32")
+        self.model = WhisperModel("small", device="cpu", compute_type="int8")
         self.last_prediction_time = datetime.now()
         self.cancel_flag = threading.Event()  # Use an event for cancellation
 

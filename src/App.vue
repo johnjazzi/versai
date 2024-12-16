@@ -1,5 +1,4 @@
 
-
 <template>
     <v-app>
       <v-container fluid class="flex flex-col justify-between h-screen">
@@ -24,7 +23,7 @@
               <!-- Add more message stubs as needed -->
             </div>
           </v-card-text>
-          <v-card-title>Translation - portuguese</v-card-title>
+          <v-card-title>Translation</v-card-title>
           <v-card-text>
             <div class="flex flex-col">
               <!-- Stub for messages -->
@@ -35,12 +34,6 @@
             </div>
           </v-card-text>
         </v-card>
-        <!-- <v-textarea
-          v-model="textInput"a
-          label="Enter text to translate"
-          @input="handleInput"
-          class="mt-2"
-        ></v-textarea> -->
 
         <v-snackbar v-for="alert in alerts" v-model="alert.visible" color="error">
           {{ alert.message }}
@@ -57,7 +50,6 @@
 
 // son of a bitch: https://github.com/xenova/whisper-web/
 
-import { pipeline} from '@xenova/transformers';
   
   export default {
     data() {
@@ -113,12 +105,16 @@ import { pipeline} from '@xenova/transformers';
           // Set up audio context, gain node, and analyser
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
           this.gainNode = this.audioContext.createGain(); // Create a gain node
-          this.gainNode.gain.value = 128; // Set gain value to amplify the audio (2x amplification)
+          this.gainNode.gain.value = 64; // Set gain value to amplify the audio (2x amplification)
           this.analyser = this.audioContext.createAnalyser();
           this.microphone = this.audioContext.createMediaStreamSource(this.mediaStream);
           this.microphone.connect(this.gainNode);
           this.gainNode.connect(this.analyser);
           this.analyser.fftSize = 2048;
+
+          const destination = this.audioContext.createMediaStreamDestination();
+          this.gainNode.connect(destination);
+          this.mediaStream = destination.stream;
 
           const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
