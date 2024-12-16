@@ -6,13 +6,8 @@ tensorflow
 numpy
 transformers
 torch
-accelerate
 torchvision 
 torchaudio
-tokenizers
-tf-keras
-langchain
-llama-cpp-python
 websockets
 ctranslate2
 faster-whisper

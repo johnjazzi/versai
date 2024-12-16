@@ -92,7 +92,7 @@ class Translator:
     def __init__(self):
         print("init translator")
         self.current_task: Optional[Future] = None
-        self.translator = ctranslate2.Translator("./app/models/nllb-200-distilled-600M")
+        self.translator = ctranslate2.Translator("./app/model/nllb-200-distilled-600M-int8_float32")
         self.tokenizer_eng = transformers.AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang="eng_Latn")
         self.tokenizer_por = transformers.AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M", src_lang="por_Latn")
         self.language_map = {
