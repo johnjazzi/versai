@@ -66,6 +66,7 @@ class AudioProcessor:
         print(translate_out)
 
         if websocket and websocket.client_state == WebSocketState.CONNECTED:
+            print("sending response")
             response = {    
                 "message": json.dumps(text_out),
                 "info": json.dumps(info.language),
