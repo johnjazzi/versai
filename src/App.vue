@@ -1,9 +1,26 @@
 <template>
     <v-app>
+
+      <v-snackbar  color="info" location="top" :timeout="5000" v-model="showWebGPUWarning">
+        This app requires WebGPU to run.
+
+        <template v-slot:actions>
+        <v-btn
+          color="pink"
+          variant="text"
+          @click="showWebGPUWarning = false"
+        >
+          Close
+        </v-btn>
+      </template>
+      </v-snackbar>
+      
       <v-container fluid class="flex flex-col justify-between h-screen">
 
         <div class="flex flex-col items-center justify-center flex-grow">
-          <v-btn @click="loadPipe" class="mb-2" v-if="!transcriber.initialized" color="primary">Load Pipe</v-btn>
+          <v-btn @click="loadPipe" class="mb-2" v-if="!transcriber.initialized" color="primary">Load Model</v-btn>
+          <v-span v-if="!transcriber.initialized">Model will be downloaded to browser cache. You only need to do this once.</v-span>
+          <hl></hl>
           <div class="flex space-x-2 mb-2 justify-center">
             <div class="flex flex-col items-center w-1/2">
               <v-btn @click="toggleRecording('lang1')" icon="mdi-microphone" :disabled="!transcriber.initialized">
@@ -110,6 +127,7 @@ import {
     },
     data() {
       return {
+        showWebGPUWarning: true,
         configs: {
           transcriber_model: 'onnx-community/whisper-base',
           segmenter_model: 'onnx-community/pyannote-segmentation-3.0',
