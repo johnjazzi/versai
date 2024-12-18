@@ -6,23 +6,33 @@
          - main  # Change this to your default branch if it's not 'main'
     workflow_dispatch: 
 
-
    permissions:
      contents: read
      pages: write
      id-token: write
-
 
    concurrency:
      group: "pages"
      cancel-in-progress: false
 
    jobs:
-     build-and-deploy:
-       environment:
-         name: github-pages
-         url: ${{ steps.deployment.outputs.page_url }}
-       runs-on: ubuntu-latest
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v3
+        - run: npm install
+        - run: npm run build
+        - uses: actions/upload-artifact@v3
+          with:
+            name: page
+            path: build
+            
+    deploy:
+      needs: build
+      runs-on: ubuntu-latest
+      environment:
+        name: github-pages
+        url: ${{ steps.deployment.outputs.page_url }}
 
        steps:
          - name: Checkout code
@@ -48,15 +58,6 @@
              # Upload entire repository
              path: './dist'
 
-     deploy:
-       needs: build-and-deploy
-       runs-on: ubuntu-latest
-       permissions:
-         contents: read
-         pages: write
-         id-token: write
-  
-       steps:
-       # Step 6: Deploy to GitHub Pages
-       - name: Deploy to GitHub Pages
-         uses: actions/deploy-pages@v4
+         - name: Deploy to GitHub Pages
+           id: deployment
+           uses: actions/deploy-pages@v4  
