@@ -12,3 +12,4 @@ npm run dev
 
 ## TODOS: 
 - [ ] translation to alternate language
+- [ ] get list of languages for the model
