@@ -14,14 +14,42 @@
         </v-btn>
       </template>
       </v-snackbar>
-      
-      <v-container fluid class="flex flex-col justify-between h-screen">
 
-        <div class="flex flex-col items-center justify-center flex-grow">
-          <v-btn @click="loadPipe" class="mb-2" v-if="!transcriber.initialized" color="primary">Load Model</v-btn>
-          <v-span v-if="!transcriber.initialized">Model will be downloaded to browser cache. You only need to do this once.</v-span>
-          <hl></hl>
-          <div class="flex space-x-2 mb-2 justify-center">
+    
+      <v-container fluid class="flex flex-col justify-between">
+        <v-card class="overflow-y-auto flex-grow">
+          <v-card-title>Transcript</v-card-title>
+          <v-card-text>
+            <div class="flex flex-col">
+              <!-- Stub for messages -->
+               {{ transcript }}
+              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
+              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
+              <!-- Add more message stubs as needed -->
+            </div>
+          </v-card-text>
+          <v-card-title v-if="translation">Translation</v-card-title>
+          <v-card-text>
+            <div class="flex flex-col">
+              <!-- Stub for messages -->
+               {{ translation }}
+              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
+              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
+              <!-- Add more message stubs as needed -->
+            </div>
+          </v-card-text>
+        </v-card>
+
+        <v-card>
+          <div v-if="!transcriber.initialized" class="flex flex-col items-center justify-center flex-grow">
+            <v-span >Model will be downloaded to browser cache. You only need to do this once.</v-span>
+            <v-btn @click="loadPipe" class="m-2" color="primary">Load Model</v-btn>
+          </div>
+      </v-card>
+
+        <v-card>
+          <div class="flex flex-col items-center justify-center flex-grow">
+          <div class="flex space-x-2 m-2 justify-center">
             <div class="flex flex-col items-center w-1/2">
               <v-btn @click="toggleRecording('lang1')" icon="mdi-microphone" :disabled="!transcriber.initialized">
                 <v-icon>mdi-microphone</v-icon>
@@ -48,33 +76,14 @@
             </div>
           </div>
           <span v-if="isRecording">Recording...</span>
-          <span v-else>Start Recording</span>
+          <span v-else>click microphone to record</span>
           <v-progress-circular v-if="isRecording" :size="100" :width="10" :model-value="Math.round(volume)" color="green"></v-progress-circular>
         </div>
-        <v-card class="overflow-y-auto flex-grow">
-          <v-card-title>Transcript</v-card-title>
-          <v-card-text>
-            <div class="flex flex-col">
-              <!-- Stub for messages -->
-               {{ transcript }}
-              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
-              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
-              <!-- Add more message stubs as needed -->
-            </div>
-          </v-card-text>
-          <v-card-title>Translation</v-card-title>
-          <v-card-text>
-            <div class="flex flex-col">
-              <!-- Stub for messages -->
-               {{ translation }}
-              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
-              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
-              <!-- Add more message stubs as needed -->
-            </div>
-          </v-card-text>
-        </v-card>
+        </v-card> 
+
       </v-container>
 
+    
       <v-snackbar v-for="alert in alerts" v-model="alert.visible" color="error">
           {{ alert.message }}
           <template v-slot:action="{ attrs }">
@@ -82,10 +91,16 @@
           </template>
         </v-snackbar>
 
-      <v-dialog v-model="loadingPipe" color="info">
+      <v-dialog v-model="transcriberInitialized" color="info">
           <v-card>
-            <v-card-title>Loading Pipe</v-card-title>
+            
+            <v-card-title>Loading Models</v-card-title>
             <v-card-text>
+              <div v-if="!loadingPipe" class="flex flex-col items-center justify-center flex-grow">
+                <v-btn @click="loadPipe" class="m-2" color="primary">Load Model</v-btn>
+                <div >Model will be downloaded to browser cache. You only need to do this once.</div>
+              </div>
+              
               <v-list density="compact">
                 <v-list-item v-for="status in loadingStatus" :key="status.file">
                   <Progress :text="`${status.file}`" :percentage="status.percentage" :total="status.total"  />
@@ -191,6 +206,9 @@ import {
     computed: {
       oppositeLanguage() {
         return this.currentLanguage === 'lang1' ? 'lang2' : 'lang1';
+      }, 
+      transcriberInitialized() {
+        return !this.transcriber.initialized;
       }
     },
 
