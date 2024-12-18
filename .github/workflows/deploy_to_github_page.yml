@@ -46,8 +46,17 @@
            uses: actions/upload-pages-artifact@v3
            with:
              # Upload entire repository
-             path: '.'
+             path: './dist'
 
-         - name: Deploy to GitHub Pages
-           id: deployment
-           uses: actions/deploy-pages@v4  
+     deploy:
+       needs: build-and-deploy
+       runs-on: ubuntu-latest
+       permissions:
+         contents: read
+         pages: write
+         id-token: write
+  
+       steps:
+       # Step 6: Deploy to GitHub Pages
+       - name: Deploy to GitHub Pages
+         uses: actions/deploy-pages@v4
