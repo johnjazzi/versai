@@ -1,12 +1,10 @@
 <template>
-    <div>
      <v-progress-linear 
-        height="16"
+        height="24"
         color="blue"
-        model-value="percentage" >
-        <strong>{{ text }} ({{ percentage.toFixed(2) }}%{{ total ? ` of ${formatBytes(total)}` : '' }})</strong> 
+        :model-value="percentage" >
+        <strong class="text-xs whitespace-nowrap">{{ text }} ({{ percentage.toFixed(2) }}%{{ total ? ` of ${formatBytes(total)}` : '' }})</strong> 
       </v-progress-linear>
-    </div>
   </template>
   
   <script>

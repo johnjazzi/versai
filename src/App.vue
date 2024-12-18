@@ -1,21 +1,7 @@
 <template>
     <v-app>
 
-      <v-snackbar  color="info" location="top" :timeout="5000" v-model="showWebGPUWarning">
-        This app requires WebGPU to run.
-
-        <template v-slot:actions>
-        <v-btn
-          color="pink"
-          variant="text"
-          @click="showWebGPUWarning = false"
-        >
-          Close
-        </v-btn>
-      </template>
-      </v-snackbar>
-
-    
+      
       <v-container fluid class="flex flex-col justify-between">
         <v-card class="overflow-y-auto flex-grow">
           <v-card-title>Transcript</v-card-title>
@@ -40,12 +26,6 @@
           </v-card-text>
         </v-card>
 
-        <v-card>
-          <div v-if="!transcriber.initialized" class="flex flex-col items-center justify-center flex-grow">
-            <v-span >Model will be downloaded to browser cache. You only need to do this once.</v-span>
-            <v-btn @click="loadPipe" class="m-2" color="primary">Load Model</v-btn>
-          </div>
-      </v-card>
 
         <v-card>
           <div class="flex flex-col items-center justify-center flex-grow">
@@ -96,16 +76,15 @@
             
             <v-card-title>Loading Models</v-card-title>
             <v-card-text>
+              <v-alert type="error" v-if="!configs.IS_WEBGPU_AVAILABLE">WebGPU is not available. Enable WebGPU in your browser settings.</v-alert>
               <div v-if="!loadingPipe" class="flex flex-col items-center justify-center flex-grow">
                 <v-btn @click="loadPipe" class="m-2" color="primary">Load Model</v-btn>
                 <div >Model will be downloaded to browser cache. You only need to do this once.</div>
               </div>
               
-              <v-list density="compact">
-                <v-list-item v-for="status in loadingStatus" :key="status.file">
+                <div v-for="status in loadingStatus" :key="status.file">
                   <Progress :text="`${status.file}`" :percentage="status.percentage" :total="status.total"  />
-                </v-list-item>
-              </v-list>
+                </div>
             </v-card-text>
           </v-card>
 
@@ -218,34 +197,47 @@ import {
         this.loadingPipe = true;
         this.loadingStatus = []; // Reset loading status
 
-        this.transcriber.tokenizer = await AutoTokenizer.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
-        this.transcriber.processor = await WhisperProcessor.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
-        this.transcriber.model = await WhisperForConditionalGeneration.from_pretrained(
-          this.configs.transcriber_model, { 
-            dtype: {
-              encoder_model: "fp32",
-              decoder_model_merged: "q4",
-            },
-            device: "webgpu",
-            progress_callback: (progress) => this.handleProgress(progress) });
-        this.transcriber.initialized = true;
+        try {
+          this.transcriber.tokenizer = await AutoTokenizer.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
+          this.transcriber.processor = await WhisperProcessor.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
+          this.transcriber.model = await WhisperForConditionalGeneration.from_pretrained(
+            this.configs.transcriber_model, { 
+              dtype: {
+                encoder_model: "fp32",
+                decoder_model_merged: "q4",
+              },
+              device: "webgpu",
+              progress_callback: (progress) => this.handleProgress(progress) });
+          this.transcriber.initialized = true;
 
-        console.log('warming transcriber')
-        await this.transcriber.model.generate({
-          input_features: full([1, 80, 3000], 0.0),
-          max_new_tokens: 1,
-          language: 'Japanese',
-        })
-        console.log('transcriber warmed')
-        
-        console.log('loading segmenter')
-        this.segmenter.processor = await AutoProcessor.from_pretrained(this.configs.segmenter_model, { progress_callback: (progress) => this.handleProgress(progress) });
-        this.segmenter.model = await AutoModelForAudioFrameClassification.from_pretrained(this.configs.segmenter_model, { 
-          dtype: "fp32",
-          device: "wasm",
-          progress_callback: (progress) => this.handleProgress(progress) });
-        this.segmenter.initialized = true;
-        console.log('segmenter loaded')
+          console.log('warming transcriber')
+          await this.transcriber.model.generate({
+            input_features: full([1, 80, 3000], 0.0),
+            max_new_tokens: 1,
+            language: 'Japanese',
+          })
+          console.log('transcriber warmed')
+          
+          console.log('loading segmenter')
+          this.segmenter.processor = await AutoProcessor.from_pretrained(this.configs.segmenter_model, { progress_callback: (progress) => this.handleProgress(progress) });
+          this.segmenter.model = await AutoModelForAudioFrameClassification.from_pretrained(this.configs.segmenter_model, { 
+            dtype: "fp32",
+            device: "wasm",
+            progress_callback: (progress) => this.handleProgress(progress) });
+          this.segmenter.initialized = true;
+          console.log('segmenter loaded')
+
+        } catch (error) {
+          this.loadingStatus = []; // Clear progress after loading
+          this.loadingPipe = false;
+          console.error('Error loading pipe:', error);
+          this.alerts.push({
+            message: error.message,
+            visible: true,
+          });
+        }
+
+       
         
 
         // console.log('loading translator')
