@@ -1,14 +1,15 @@
 
-###terminal 1
+This is a simple Vue app to transcribe audio in real time and translate it to a different language directly in the browser. 
+
+Its an implementation of the Whisper model with a custom processor bassed https://huggingface.co/spaces/Xenova/realtime-whisper-webgpu 
+
+
+## initlization 
+```
+npm install
 npm run dev
+```
 
-### terminal 2
-python3.10 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-
-### convert facebook to 
-
-
-ct2-transformers-converter --model facebook/nllb-200-distilled-600M --output_dir nllb-200-distilled-600M
+## TODOS: 
+- [ ] translation to alternate language
+- [ ] get list of languages for the model
