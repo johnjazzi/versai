@@ -1,8 +1,11 @@
 <template>
-    <div class="w-full bg-gray-100 dark:bg-gray-700 text-left rounded-lg overflow-hidden mb-0.5">
-      <div class="bg-blue-400 whitespace-nowrap px-1 text-sm" :style="{ width: `${percentage}%` }">
-        {{ text }} ({{ percentage.toFixed(2) }}%{{ total ? ` of ${formatBytes(total)}` : '' }})
-      </div>
+    <div>
+     <v-progress-linear 
+        height="16"
+        color="blue"
+        model-value="percentage" >
+        <strong>{{ text }} ({{ percentage.toFixed(2) }}%{{ total ? ` of ${formatBytes(total)}` : '' }})</strong> 
+      </v-progress-linear>
     </div>
   </template>
   
