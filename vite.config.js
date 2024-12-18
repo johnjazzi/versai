@@ -7,6 +7,7 @@ export default defineConfig({
     vue(),
     vuetify({ autoImport: true })
 ],
+  base: '/versai/',
   server: {
     // Optional: Configure server settings
     port: 3000, // Change to your desired port
