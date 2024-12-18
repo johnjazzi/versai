@@ -13,3 +13,5 @@ npm run dev
 ## TODOS: 
 - [ ] translation to alternate language
 - [ ] get list of languages for the model
+- [ ] add a button to quick switch languges
+- [ ] re-design the UI 

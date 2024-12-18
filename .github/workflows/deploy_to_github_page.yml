@@ -1,9 +1,10 @@
    name: Deploy to GitHub Pages
 
    on:
-     push:
+    push:
        branches:
          - main  # Change this to your default branch if it's not 'main'
+    workflow_dispatch: 
 
    jobs:
      build-and-deploy:
