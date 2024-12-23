@@ -31,24 +31,29 @@
           <div class="flex flex-col items-center justify-center flex-grow">
           <div class="flex space-x-2 m-2 justify-center">
             <div class="flex flex-col items-center w-1/2">
-              <v-btn @click="toggleRecording('lang1')" icon="mdi-microphone" :disabled="!transcriber.initialized">
+              <v-btn @click="toggleRecording(this.languages.lang1)" icon="mdi-microphone" :disabled="!transcriber.initialized">
                 <v-icon>mdi-microphone</v-icon>
               </v-btn>
               <v-select
                 v-model="languages.lang1"
                 :items="languageOptions"
+                item-title="name"
+                item-value="code"
                 label="Select Language 1"
                 class="mt-2"
                 density="compact"
+                disabled
               ></v-select>
             </div>
             <div class="flex flex-col items-center w-1/2">
-              <v-btn @click="toggleRecording('lang2')" icon="mdi-microphone" :disabled="!transcriber.initialized">
+              <v-btn @click="toggleRecording(this.languages.lang2)" icon="mdi-microphone" :disabled="!transcriber.initialized">
                 <v-icon>mdi-microphone</v-icon>
               </v-btn>
               <v-select
                 v-model="languages.lang2"
                 :items="languageOptions"
+                item-title="name"
+                item-value="code"
                 label="Select Language 2"
                 class="mt-2"
                 density="compact"
@@ -113,9 +118,9 @@ import {
 } from "@huggingface/transformers";
 // Allocate pipeline
 
-
+import languageData from './languages.json';
   
-  export default {
+export default {
     components: {
       Progress
     },
@@ -125,7 +130,8 @@ import {
         configs: {
           transcriber_model: 'onnx-community/whisper-base',
           segmenter_model: 'onnx-community/pyannote-segmentation-3.0',
-          translator_model: 'Xenova/nllb-200-distilled-600M',
+          segmenter: false, // use segmenter
+          translator: true, // use translator
           mediaRecorderInterval: 5000,
           trackSwitchInterval: 5000,
           mimeType: "audio/mp4",
@@ -136,11 +142,11 @@ import {
           MAX_NEW_TOKENS: 64,
         },
         languages: {
-          lang1: 'English',
-          lang2: 'Portuguese',
+          lang1: 'en',
+          lang2: 'pt_BR',
         },
-        languageOptions: ["English", "Portuguese"],
-        currentLanguage: 'lang1',
+        languageOptions: languageData.romance_languages,
+        currentLanguage: 'en',
         textInput: '',
         responses: [], // Array to store responses with timestamps
         socket: null, // WebSocket instance
@@ -174,9 +180,9 @@ import {
           initialized: false,
         },
         translator: {
+          ro_to_eng_pipe: null,
+          eng_to_ro_pipe: null,
           isProcessing: false,
-          tokenizer: null,
-          model: null,
           initialized: false,
         },
       };
@@ -184,7 +190,7 @@ import {
 
     computed: {
       oppositeLanguage() {
-        return this.currentLanguage === 'lang1' ? 'lang2' : 'lang1';
+        return this.currentLanguage === 'en' ? this.languages.lang2 : 'en';
       }, 
       transcriberInitialized() {
         return !this.transcriber.initialized;
@@ -192,13 +198,9 @@ import {
     },
 
     methods: {
-      async loadPipe() {
-        console.log('loading transcriber');
-        this.loadingPipe = true;
-        this.loadingStatus = []; // Reset loading status
-
-        try {
-          this.transcriber.tokenizer = await AutoTokenizer.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
+      async loadTranscriber() {
+        console.log('loading transcriber')
+        this.transcriber.tokenizer = await AutoTokenizer.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
           this.transcriber.processor = await WhisperProcessor.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
           this.transcriber.model = await WhisperForConditionalGeneration.from_pretrained(
             this.configs.transcriber_model, { 
@@ -216,16 +218,50 @@ import {
             max_new_tokens: 1,
             language: 'Japanese',
           })
-          console.log('transcriber warmed')
-          
-          console.log('loading segmenter')
-          this.segmenter.processor = await AutoProcessor.from_pretrained(this.configs.segmenter_model, { progress_callback: (progress) => this.handleProgress(progress) });
-          this.segmenter.model = await AutoModelForAudioFrameClassification.from_pretrained(this.configs.segmenter_model, { 
+          console.log('transcriber loaded andwarmed')
+      }, 
+
+      async loadSegmenter() {
+        console.log('loading segmenter')
+        this.segmenter.processor = await AutoProcessor.from_pretrained(this.configs.segmenter_model, { progress_callback: (progress) => this.handleProgress(progress) });
+        this.segmenter.model = await AutoModelForAudioFrameClassification.from_pretrained(this.configs.segmenter_model, { 
             dtype: "fp32",
             device: "wasm",
             progress_callback: (progress) => this.handleProgress(progress) });
-          this.segmenter.initialized = true;
-          console.log('segmenter loaded')
+        this.segmenter.initialized = true;
+        console.log('segmenter loaded')
+      },
+
+      async loadTranslator() {
+        
+        console.log('loading translator')
+        this.translator.ro_to_eng_pipe = await pipeline('translation', 'Xenova/opus-mt-ROMANCE-en', { device: 'webgpu' , progress_callback: (progress) => this.handleProgress(progress) });
+        this.translator.eng_to_ro_pipe = await pipeline('translation', 'Xenova/opus-mt-en-ROMANCE', { device: 'webgpu' , progress_callback: (progress) => this.handleProgress(progress) });
+
+        console.log('warming translator')
+        console.log(await this.translator.eng_to_ro_pipe(" >>pt_BR<< Hello world!"))
+
+        console.log(await this.translator.ro_to_eng_pipe("Oi tudo bem?"))
+
+        console.log('translator loaded')
+        this.translator.initialized = true;
+      },
+
+      async loadPipe() {;
+        this.loadingPipe = true;
+        this.loadingStatus = []; // Reset loading status
+
+        try {
+
+          await this.loadTranscriber();
+
+          if (this.configs.segmenter) {
+            await this.loadSegmenter();
+          }
+
+          if (this.configs.translator) {
+            await this.loadTranslator();
+          }
 
         } catch (error) {
           this.loadingStatus = []; // Clear progress after loading
@@ -237,30 +273,12 @@ import {
           });
         }
 
-       
-        
-
-        // console.log('loading translator')
-
-        // this.translator.tokenizer = await AutoTokenizer.from_pretrained(this.configs.translator_model, { progress_callback: (progress) => this.handleProgress(progress) });
-        // this.translator.model = await AutoModelForSeq2SeqLM.from_pretrained(this.configs.translator_model, {
-        //   progress_callback: (progress) => this.handleProgress(progress),
-        // });
-        // this.translator.initialized = true;
-        // console.log('warming translator')
-        // tokenizer.src_lang = "en"
-
-        // const source = this.translator.tokenizer.convert_ids_to_tokens(this.translator.tokenizer.encode("Hello world!"))
-        // const target_prefix = [tokenizer.lang_code_to_token["de"]]
-        // const results = this.translator.model.translate_batch([source], target_prefix=[target_prefix])
-        // console.log('translator warmed')
-
         this.loadingStatus = []; // Clear progress after loading
         this.loadingPipe = false;
       },
 
       async segment({audio}) {
-        if (this.segmenter.isProcessing) return;
+        if (this.segmenter.isProcessing || !this.segmenter.initialized) return;
         this.segmenter.isProcessing = true;
 
         const inputs = await this.segmenter.processor(audio)
@@ -275,7 +293,7 @@ import {
         return segments;
       },
 
-      async transcribe({audio,language_from = 'en', language_to = null}) {
+      async transcribe({audio,language_from = 'en'}) {
         if (this.transcriber.isProcessing) return;
         this.transcriber.isProcessing = true;
 
@@ -330,14 +348,19 @@ import {
         return decoded
       },
 
-      async translate({text, source_language = 'eng_Latn', target_language = 'por_Latn'}) {
-        if (this.translator.isProcessing) return;
+      async translate({text, source_language = 'en', target_language = 'pt_BR'}) {
+
+        if (this.translator.isProcessing || !this.translator.initialized) return;
         this.translator.isProcessing = true;
 
-        const translated = await this.translator.model(text, {
-          tgt_lang: source_language,
-          src_lang: target_language,
-        })
+        console.log('translating', text, source_language, target_language)
+
+        let translated;
+        if (source_language == 'en') {
+          translated  = await this.translator.eng_to_ro_pipe(` >>${target_language}<< ${text}`)
+        } else {
+          translated = await this.translator.ro_to_eng_pipe(`${text}`)
+        }
 
         this.translator.isProcessing = false;
         return translated
@@ -456,10 +479,11 @@ import {
               console.log('segments', segments)
             }
 
-            const transcript = await this.transcribe({audio, language_from: this.languages[this.currentLanguage], language_to: this.languages[this.oppositeLanguage]});
+            const transcript = await this.transcribe({audio, language_from: this.currentLanguage});
             this.transcript = transcript[0];
             if ( this.translator.initialized) {
-              const translation = await this.translate({text: transcript[0]});
+              const translation = await this.translate({text: transcript[0], source_language: this.currentLanguage, target_language: this.oppositeLanguage});
+              console.log('translation', translation)
               this.translation = translation;
             }
           }

@@ -1,0 +1,192 @@
+{
+  "romance_languages": [
+    {
+      "name": "French",
+      "code": "fr"
+    },
+    {
+      "name": "French (Belgium)",
+      "code": "fr_BE"
+    },
+    {
+      "name": "French (Canada)",
+      "code": "fr_CA"
+    },
+    {
+      "name": "French (France)",
+      "code": "fr_FR"
+    },
+    {
+      "name": "Walloon",
+      "code": "wa"
+    },
+    {
+      "name": "Franco-Provençal",
+      "code": "frp"
+    },
+    {
+      "name": "Occitan",
+      "code": "oc"
+    },
+    {
+      "name": "Catalan",
+      "code": "ca"
+    },
+    {
+      "name": "Romansh",
+      "code": "rm"
+    },
+    {
+      "name": "Ladin",
+      "code": "lld"
+    },
+    {
+      "name": "Friulian",
+      "code": "fur"
+    },
+    {
+      "name": "Ligurian",
+      "code": "lij"
+    },
+    {
+      "name": "Lombard",
+      "code": "lmo"
+    },
+    {
+      "name": "Spanish",
+      "code": "es"
+    },
+    {
+      "name": "Spanish (Argentina)",
+      "code": "es_AR"
+    },
+    {
+      "name": "Spanish (Chile)",
+      "code": "es_CL"
+    },
+    {
+      "name": "Spanish (Colombia)",
+      "code": "es_CO"
+    },
+    {
+      "name": "Spanish (Costa Rica)",
+      "code": "es_CR"
+    },
+    {
+      "name": "Spanish (Dominican Republic)",
+      "code": "es_DO"
+    },
+    {
+      "name": "Spanish (Ecuador)",
+      "code": "es_EC"
+    },
+    {
+      "name": "Spanish (Spain)",
+      "code": "es_ES"
+    },
+    {
+      "name": "Spanish (Guatemala)",
+      "code": "es_GT"
+    },
+    {
+      "name": "Spanish (Honduras)",
+      "code": "es_HN"
+    },
+    {
+      "name": "Spanish (Mexico)",
+      "code": "es_MX"
+    },
+    {
+      "name": "Spanish (Nicaragua)",
+      "code": "es_NI"
+    },
+    {
+      "name": "Spanish (Panama)",
+      "code": "es_PA"
+    },
+    {
+      "name": "Spanish (Peru)",
+      "code": "es_PE"
+    },
+    {
+      "name": "Spanish (Puerto Rico)",
+      "code": "es_PR"
+    },
+    {
+      "name": "Spanish (El Salvador)",
+      "code": "es_SV"
+    },
+    {
+      "name": "Spanish (Uruguay)",
+      "code": "es_UY"
+    },
+    {
+      "name": "Spanish (Venezuela)",
+      "code": "es_VE"
+    },
+    {
+      "name": "Portuguese",
+      "code": "pt"
+    },
+    {
+      "name": "Portuguese (Brazil)",
+      "code": "pt_BR"
+    },
+    {
+      "name": "Portuguese (Portugal)",
+      "code": "pt_PT"
+    },
+    {
+      "name": "Galician",
+      "code": "gl"
+    },
+    {
+      "name": "Ladino",
+      "code": "lad"
+    },
+    {
+      "name": "Aragonese",
+      "code": "an"
+    },
+    {
+      "name": "Mirandese",
+      "code": "mwl"
+    },
+    {
+      "name": "Italian",
+      "code": "it"
+    },
+    {
+      "name": "Italian (Italy)",
+      "code": "it_IT"
+    },
+    {
+      "name": "Corsican",
+      "code": "co"
+    },
+    {
+      "name": "Neapolitan",
+      "code": "nap"
+    },
+    {
+      "name": "Sicilian",
+      "code": "scn"
+    },
+    {
+      "name": "Venetian",
+      "code": "vec"
+    },
+    {
+      "name": "Sardinian",
+      "code": "sc"
+    },
+    {
+      "name": "Romanian",
+      "code": "ro"
+    },
+    {
+      "name": "Latin",
+      "code": "la"
+    }
+  ]
+} 
