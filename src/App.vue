@@ -103,6 +103,7 @@
 
 // npm i @huggingface/transformers
 import Progress from './components/Progress.vue'; // Import the Progress component
+import { env } from '@xenova/transformers';
 
 
 import {
@@ -140,6 +141,7 @@ export default {
           MAX_AUDIO_LENGTH: 30, // 300 seconds
           MAX_SAMPLES : 30*16000,
           MAX_NEW_TOKENS: 64,
+          device: "webgpu",
         },
         languages: {
           lang1: 'en',
@@ -201,19 +203,23 @@ export default {
       async loadTranscriber() {
         console.log('loading transcriber')
         this.transcriber.tokenizer = await AutoTokenizer.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
-          this.transcriber.processor = await WhisperProcessor.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
-          this.transcriber.model = await WhisperForConditionalGeneration.from_pretrained(
+        this.transcriber.processor = await WhisperProcessor.from_pretrained(this.configs.transcriber_model, { progress_callback: (progress) => this.handleProgress(progress) });
+        this.transcriber.model = await WhisperForConditionalGeneration.from_pretrained(
             this.configs.transcriber_model, { 
               dtype: {
                 encoder_model: "fp32",
                 decoder_model_merged: "q4",
               },
-              device: "webgpu",
+              device: this.configs.device,
               progress_callback: (progress) => this.handleProgress(progress) });
-          this.transcriber.initialized = true;
+        this.transcriber.initialized = true;
 
-          console.log('warming transcriber')
-          await this.transcriber.model.generate({
+        this.transcriber.model.save_pretrained('/model/whisper-base')
+        this.transcriber.tokenizer.save_pretrained('/model/whisper-base')
+        this.transcriber.processor.save_pretrained('/model/whisper-base')
+
+        console.log('warming transcriber')
+        await this.transcriber.model.generate({
             input_features: full([1, 80, 3000], 0.0),
             max_new_tokens: 1,
             language: 'Japanese',
@@ -235,8 +241,8 @@ export default {
       async loadTranslator() {
         
         console.log('loading translator')
-        this.translator.ro_to_eng_pipe = await pipeline('translation', 'Xenova/opus-mt-ROMANCE-en', { device: 'webgpu' , progress_callback: (progress) => this.handleProgress(progress) });
-        this.translator.eng_to_ro_pipe = await pipeline('translation', 'Xenova/opus-mt-en-ROMANCE', { device: 'webgpu' , progress_callback: (progress) => this.handleProgress(progress) });
+        this.translator.ro_to_eng_pipe = await pipeline('translation', 'Xenova/opus-mt-ROMANCE-en', { device: this.configs.device , progress_callback: (progress) => this.handleProgress(progress) });
+        this.translator.eng_to_ro_pipe = await pipeline('translation', 'Xenova/opus-mt-en-ROMANCE', { device: this.configs.device , progress_callback: (progress) => this.handleProgress(progress) });
 
         console.log('warming translator')
         console.log(await this.translator.eng_to_ro_pipe(" >>pt_BR<< Hello world!"))
@@ -334,7 +340,7 @@ export default {
         const outputs = await this.transcriber.model.generate({
           ...inputs,
           max_new_tokens: this.configs.MAX_NEW_TOKENS,
-          language: language_from,
+          language: language_from.split('_')[0],
           streamer,
           ...(forced_decoder_ids ? { forced_decoder_ids } : {}),
         });
