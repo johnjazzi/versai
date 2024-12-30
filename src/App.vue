@@ -1,35 +1,28 @@
 <template>
     <v-app>
-
       
-      <v-container fluid class="flex flex-col justify-between">
-        <v-card class="overflow-y-auto flex-grow">
-          <v-card-title>Transcript</v-card-title>
-          <v-card-text>
-            <div class="flex flex-col">
-              <!-- Stub for messages -->
-               {{ transcript }}
-              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
-              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
-              <!-- Add more message stubs as needed -->
+      <v-container fluid class="flex flex-col h-screen bg-gradient">
+        <div class="overflow-y-auto flex-grow">
+          <div class="p-4">
+            <div class="flex flex-col space-y-4">
+              <!-- Messages history -->
+              <template v-for="(message, index) in messages" :key="index">
+                <v-card :class="message.language === 'en' ? 'ml-0 mr-auto' : 'mr-0 ml-auto'" max-width="80%">
+                  <v-card-text>
+                    <div class="font-medium">{{ message.transcript }}</div>
+                    <div v-if="message.translation" class="text-sm text-gray-600 mt-1">
+                      {{ message.translation }}
+                    </div>
+                  </v-card-text>
+                </v-card>
+              </template>
             </div>
-          </v-card-text>
-          <v-card-title v-if="translation">Translation</v-card-title>
-          <v-card-text>
-            <div class="flex flex-col">
-              <!-- Stub for messages -->
-               {{ translation }}
-              <!-- <div class="m-1 p-2 rounded bg-green-200 self-end">User message here</div>
-              <div class="m-1 p-2 rounded bg-gray-200 self-start">Response message here</div> -->
-              <!-- Add more message stubs as needed -->
-            </div>
-          </v-card-text>
-        </v-card>
+          </div>
+        </div>
 
-
-        <v-card>
-          <div class="flex flex-col items-center justify-center flex-grow">
-          <div class="flex space-x-2 m-2 justify-center">
+        <v-card class="mt-auto">
+          <div class="flex flex-col items-center justify-center p-4">
+          <div class="flex space-x-2 mb-4 justify-center w-full">
             <div class="flex flex-col items-center w-1/2">
               <v-btn @click="toggleRecording(this.languages.lang1)" icon="mdi-microphone" :disabled="!transcriber.initialized">
                 <v-icon>mdi-microphone</v-icon>
@@ -60,9 +53,17 @@
               ></v-select>
             </div>
           </div>
-          <span v-if="isRecording">Recording...</span>
-          <span v-else>click microphone to record</span>
-          <v-progress-circular v-if="isRecording" :size="100" :width="10" :model-value="Math.round(volume)" color="green"></v-progress-circular>
+          <div class="text-center mb-2">
+            <span v-if="isRecording">Recording...</span>
+            <span v-else>click microphone to record</span>
+          </div>
+          <v-progress-circular
+            v-if="isRecording"
+            :size="100"
+            :width="10"
+            :model-value="Math.round(volume)"
+            color="green"
+          ></v-progress-circular>
         </div>
         </v-card> 
 
@@ -161,9 +162,7 @@ export default {
         microphone: null,    
         audioBuffer: [],
 
-        transcript: null,
-        translation: null,
-        alerts : [], // Snackbar message
+        messages: [], // Array to store message history
 
         loadingPipe: false,
         loadingStatus: [],
@@ -187,6 +186,7 @@ export default {
           isProcessing: false,
           initialized: false,
         },
+        currentSessionBuffer: [], // Add this to store chunks during a session
       };
     },
 
@@ -195,7 +195,7 @@ export default {
         return this.currentLanguage === 'en' ? this.languages.lang2 : 'en';
       }, 
       transcriberInitialized() {
-        return !this.transcriber.initialized;
+        return !this.transcriber.initialized || !this.loadingPipe;
       }
     },
 
@@ -214,10 +214,6 @@ export default {
               progress_callback: (progress) => this.handleProgress(progress) });
         this.transcriber.initialized = true;
 
-        this.transcriber.model.save_pretrained('/model/whisper-base')
-        this.transcriber.tokenizer.save_pretrained('/model/whisper-base')
-        this.transcriber.processor.save_pretrained('/model/whisper-base')
-
         console.log('warming transcriber')
         await this.transcriber.model.generate({
             input_features: full([1, 80, 3000], 0.0),
@@ -232,7 +228,7 @@ export default {
         this.segmenter.processor = await AutoProcessor.from_pretrained(this.configs.segmenter_model, { progress_callback: (progress) => this.handleProgress(progress) });
         this.segmenter.model = await AutoModelForAudioFrameClassification.from_pretrained(this.configs.segmenter_model, { 
             dtype: "fp32",
-            device: "wasm",
+            device: "webgpu",
             progress_callback: (progress) => this.handleProgress(progress) });
         this.segmenter.initialized = true;
         console.log('segmenter loaded')
@@ -253,21 +249,26 @@ export default {
         this.translator.initialized = true;
       },
 
-      async loadPipe() {;
+      async loadPipe() {
         this.loadingPipe = true;
         this.loadingStatus = []; // Reset loading status
 
         try {
-
-          await this.loadTranscriber();
+          // Create an array of promises to execute
+          const loadingTasks = [
+            this.loadTranscriber()
+          ];
 
           if (this.configs.segmenter) {
-            await this.loadSegmenter();
+            loadingTasks.push(this.loadSegmenter());
           }
 
           if (this.configs.translator) {
-            await this.loadTranslator();
+            loadingTasks.push(this.loadTranslator());
           }
+
+          // Wait for all promises to resolve
+          await Promise.all(loadingTasks);
 
         } catch (error) {
           this.loadingStatus = []; // Clear progress after loading
@@ -386,6 +387,11 @@ export default {
       async toggleRecording(language) {
         if (this.isRecording) {
           this.stopRecording();
+          // Restart recording with new language if clicking different mic
+          if (language !== this.currentLanguage) {
+            await this.startRecording();
+            this.currentLanguage = language;
+          }
         } else {
           await this.startRecording();
           this.currentLanguage = language;
@@ -401,6 +407,7 @@ export default {
           this.recorder = new MediaRecorder(this.mediaStream);
           this.audioContext = new AudioContext({sampleRate: this.configs.WHISPER_SAMPLING_RATE});
 
+          this.currentSessionBuffer = []; // Reset the session buffer when starting
           this.recorder.onstart = () => {
             this.audioBuffer = []
             this.isRecording = true;
@@ -455,46 +462,60 @@ export default {
       stopRecording() {
         this.recorder.stop();
         this.isRecording = false;
+        // Process the entire session buffer here
+        this.processCompleteSession();
+        this.currentSessionBuffer = [];
         this.audioBuffer = [];
         this.audioContext.close();
         this.analyser = null;
         this.microphone = null;
         this.gainNode = null;
         this.mediaStream = null;
+      },
+
+      async processCompleteSession() {
+        if (this.currentSessionBuffer.length === 0) return;
+
+        const blob = new Blob(this.currentSessionBuffer, { type: this.recorder.mimeType });
+        const fileReader = new FileReader();
+
+        fileReader.onload = async () => {
+          const arrayBuffer = fileReader.result;
+          const decoded = await this.audioContext.decodeAudioData(arrayBuffer);
+          let audio = decoded.getChannelData(0);
+          if (audio.length > this.configs.MAX_SAMPLES) {
+            audio = audio.slice(-this.configs.MAX_SAMPLES);
+          }
+
+          const transcript = await this.transcribe({audio, language_from: this.currentLanguage});
+          let translation = null;
+          
+          if (this.translator.initialized) {
+            translation = await this.translate({
+              text: transcript[0], 
+              source_language: this.currentLanguage, 
+              target_language: this.oppositeLanguage
+            });
+          }
+
+          // Add complete session message to history
+          this.messages.push({
+            language: this.currentLanguage,
+            transcript: transcript[0],
+            translation: translation
+          });
+        }
+
+        fileReader.readAsArrayBuffer(blob);
       }
 
     },
 
     watch: {
       audioBuffer: async function() {
-        if (this.audioBuffer != null && this.audioBuffer.length > 0 ) {
-
-          const blob = new Blob(this.audioBuffer, { type: this.recorder.mimeType });
-          const fileReader = new FileReader();
-
-          fileReader.onload = async () => {
-            const arrayBuffer = fileReader.result;
-            const decoded = await this.audioContext.decodeAudioData(arrayBuffer);
-            let audio = decoded.getChannelData(0);
-            if (audio.length > this.configs.MAX_SAMPLES) {
-              audio = audio.slice(-this.configs.MAX_SAMPLES);
-            }
-
-            if (this.segmenter.initialized) {
-              const segments = await this.segment({audio});
-              console.log('segments', segments)
-            }
-
-            const transcript = await this.transcribe({audio, language_from: this.currentLanguage});
-            this.transcript = transcript[0];
-            if ( this.translator.initialized) {
-              const translation = await this.translate({text: transcript[0], source_language: this.currentLanguage, target_language: this.oppositeLanguage});
-              console.log('translation', translation)
-              this.translation = translation;
-            }
-          }
-
-          fileReader.readAsArrayBuffer(blob);
+        if (this.audioBuffer != null && this.audioBuffer.length > 0) {
+          // Instead of processing immediately, add to session buffer
+          this.currentSessionBuffer.push(...this.audioBuffer);
         }
       }
     }
@@ -504,6 +525,16 @@ export default {
   </script>
   
   <style>
+  .bg-gradient {
+    background: linear-gradient(135deg, 
+      #f8f9f5 0%,
+      #eef2e5 25%,
+      #f0f2e6 50%,
+      #f2f5eb 75%,
+      #f8f9f5 100%
+    );
+  }
+
   .volume-bar {
     height: 10px;
     background-color: green;
